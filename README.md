@@ -118,7 +118,7 @@ Job-Sniper/
 Requires Python 3.11+.
 
 ```bash
-git clone [<repo-url>](https://github.com/ericmay33/Job-Sniper.git)
+git clone https://github.com/ericmay33/Job-Sniper.git
 cd Job-Sniper
 pip install -e .
 sniper --help
