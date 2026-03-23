@@ -1,4 +1,4 @@
-"""SQLite schema initialization and all database helper functions."""
+"""SQLite schema initialization and database helper functions."""
 
 import sqlite3
 from datetime import datetime
@@ -14,7 +14,7 @@ def _connect() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create tables if they don't exist. Called on every CLI invocation."""
+    """Idempotent schema creation. Called on every CLI invocation."""
     conn = _connect()
     try:
         conn.executescript("""
@@ -63,7 +63,7 @@ def init_db() -> None:
 
 
 def add_company(company: str, role: str, url: str, notes: str, applied: bool) -> int:
-    """Insert a new company. Returns company id. Raises if duplicate."""
+    """Insert a new company. Returns company id. Raises IntegrityError if duplicate."""
     conn = _connect()
     try:
         existing = conn.execute(
@@ -89,17 +89,14 @@ def add_company(company: str, role: str, url: str, notes: str, applied: bool) ->
 
 
 def get_queued() -> list[dict]:
-    """Return all companies with status 'queued'."""
     return get_by_status("queued")
 
 
 def get_ready() -> list[dict]:
-    """Return all companies with status 'ready'."""
     return get_by_status("ready")
 
 
 def get_by_status(status: str) -> list[dict]:
-    """Return all companies matching a status."""
     conn = _connect()
     try:
         rows = conn.execute(
@@ -111,7 +108,7 @@ def get_by_status(status: str) -> list[dict]:
 
 
 def update_company(company_id: int, **kwargs) -> None:
-    """Update arbitrary fields on a company row. Always updates updated_at."""
+    """Update arbitrary fields on a company row. Auto-sets updated_at."""
     if not kwargs:
         return
     kwargs["updated_at"] = datetime.now().isoformat()
@@ -119,18 +116,15 @@ def update_company(company_id: int, **kwargs) -> None:
     values = list(kwargs.values()) + [company_id]
     conn = _connect()
     try:
-        conn.execute(
-            f"UPDATE companies SET {set_clause} WHERE id = ?", values
-        )
+        conn.execute(f"UPDATE companies SET {set_clause} WHERE id = ?", values)
         conn.commit()
     finally:
         conn.close()
 
 
 def update_status(company_name: str, new_status: str) -> None:
-    """Find company by name (case-insensitive LIKE match), update status.
-    If new_status is 'emailed', also set emailed_date to now.
-    Log to outreach_log."""
+    """LIKE-match company by name, update status. Sets emailed_date on 'emailed',
+    increments followup_count on 'followed_up'. Logs to outreach_log."""
     conn = _connect()
     try:
         row = conn.execute(
@@ -166,7 +160,8 @@ def update_status(company_name: str, new_status: str) -> None:
 
 
 def get_followups_due() -> list[dict]:
-    """Return companies where a follow-up is due based on timing rules."""
+    """Return companies needing follow-up based on timing rules.
+    Side effect: auto-marks companies with 3+ follow-ups as 'dead'."""
     conn = _connect()
     try:
         rows = conn.execute(
@@ -199,7 +194,6 @@ def get_followups_due() -> list[dict]:
                 r["next_followup"] = fc + 1
                 due.append(r)
 
-        # Auto-mark dead: followup_count >= 3 and still not replied
         stale_rows = conn.execute(
             """SELECT id FROM companies
                WHERE status IN ('emailed', 'followed_up')
@@ -223,7 +217,6 @@ def get_followups_due() -> list[dict]:
 
 
 def get_status_counts() -> dict:
-    """Return {status: count} for all statuses."""
     conn = _connect()
     try:
         rows = conn.execute(
@@ -235,7 +228,6 @@ def get_status_counts() -> dict:
 
 
 def get_credit_usage(service: str) -> int:
-    """Return credits used this month for a service."""
     month = datetime.now().strftime("%Y-%m")
     conn = _connect()
     try:
@@ -249,7 +241,6 @@ def get_credit_usage(service: str) -> int:
 
 
 def increment_credits(service: str, amount: int = 1) -> None:
-    """Increment credit counter for service for current month."""
     month = datetime.now().strftime("%Y-%m")
     conn = _connect()
     try:
@@ -265,20 +256,8 @@ def increment_credits(service: str, amount: int = 1) -> None:
         conn.close()
 
 
-def get_company_by_id(company_id: int) -> dict | None:
-    """Return single company row by id."""
-    conn = _connect()
-    try:
-        row = conn.execute(
-            "SELECT * FROM companies WHERE id = ?", (company_id,)
-        ).fetchone()
-        return dict(row) if row else None
-    finally:
-        conn.close()
-
-
 def search_company(name: str) -> dict | None:
-    """Case-insensitive search for a company by name. Returns first match or None."""
+    """Case-insensitive partial match. Returns first match or None."""
     conn = _connect()
     try:
         row = conn.execute(

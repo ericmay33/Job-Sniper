@@ -1,31 +1,22 @@
 """Apollo API integration for contact discovery."""
 
 import requests
-from rich.console import Console
 
 import config
 import db
-
-console = Console(force_terminal=True)
 
 RECRUITER_KEYWORDS = {"recruiter", "talent acquisition", "recruiting"}
 
 
 def _is_recruiter_title(title: str) -> bool:
-    """Check if a title looks like a recruiter (vs engineering manager)."""
     lower = title.lower()
     return any(kw in lower for kw in RECRUITER_KEYWORDS)
 
 
 def search_contact(company_name: str) -> dict | None:
-    """
-    Search Apollo for a recruiter or engineering manager at the given company.
-
-    Returns dict with keys: name, first_name, title, email, linkedin_url
-    Returns None if no suitable contact found.
-    """
+    """Search Apollo for a recruiter or eng manager. Returns contact dict or None."""
     if not config.APOLLO_API_KEY:
-        console.print("[red]✗ Apollo API key not set. Add APOLLO_API_KEY to your .env file[/red]")
+        print("✗ Apollo API key not set. Add APOLLO_API_KEY to your .env file")
         return None
 
     payload = {
@@ -51,25 +42,25 @@ def search_contact(company_name: str) -> dict | None:
             timeout=10,
         )
     except requests.RequestException as e:
-        console.print(f"[yellow]⚠ Apollo request failed for {company_name}: {e}[/yellow]")
+        print(f"⚠ Apollo request failed for {company_name}: {e}")
         db.increment_credits("apollo")
         return None
 
     db.increment_credits("apollo")
 
     if resp.status_code != 200:
-        console.print(f"[yellow]⚠ Apollo returned {resp.status_code} for {company_name}: {resp.text[:200]}[/yellow]")
+        print(f"⚠ Apollo returned {resp.status_code} for {company_name}: {resp.text[:200]}")
         return None
 
     people = resp.json().get("people") or []
     if not people:
         return None
 
-    # Filter to people with emails, sort recruiters first
     with_email = [p for p in people if p.get("email")]
     if not with_email:
         return None
 
+    # Prefer recruiters over eng managers
     with_email.sort(key=lambda p: 0 if _is_recruiter_title(p.get("title", "")) else 1)
 
     best = with_email[0]

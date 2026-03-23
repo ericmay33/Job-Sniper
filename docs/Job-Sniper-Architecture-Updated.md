@@ -1,4 +1,4 @@
-# Job Sniper — Architecture Document (Updated March 22, 2026)
+# Job Sniper — Architecture Document (Updated March 23, 2026)
 
 ## Build Status
 
@@ -9,12 +9,11 @@
 | 3 | Apollo API integration | apollo.py | ✅ DONE |
 | 4 | Verification fallback chain | verify.py | ✅ DONE |
 | 5 | Email templates (editable JSON) | templates.py, templates.json | ✅ DONE |
-| 6 | Rich display module | display.py | ❌ NOT STARTED |
-| 7 | Polish + integration test | all files | ❌ NOT STARTED |
+| 6 | Rich display module | display.py | ✅ DONE |
+| 7 | Polish + integration test | all files | ✅ DONE |
+| 8 | Interactive shell (prompt_toolkit) | shell.py | ✅ DONE |
 
-**What works right now:** The full pipeline runs end-to-end — `add` → `process` (Apollo → Hunter/ZeroBounce → generate draft → status=ready) → `drafts` → `drafts show` → `update` → `followups` → `status`. All Rich output is currently inline in sniper.py (not in a separate display.py). Templates are editable via templates.json.
-
-**What remains:** Prompt 6 extracts display logic into display.py for cleaner separation. Prompt 7 is a full integration test + polish pass.
+**What works right now:** The full pipeline runs end-to-end — `add` → `process` (Apollo → Hunter/ZeroBounce → generate draft → status=ready) → `drafts` → `drafts show` → `update` → `followups` → `status`. Rich display logic extracted into display.py. Templates are editable via templates.json. Interactive shell with tab completion, command history, and colored prompt. All commands tested end-to-end with edge case coverage.
 
 ---
 
@@ -29,20 +28,20 @@ A local Python CLI tool that automates cold email outreach to recruiters and eng
 ## Current File Structure
 
 ```
-job-sniper/
-├── sniper.py          # CLI entry point (Typer app, all commands + inline Rich display)
-├── db.py              # SQLite schema init + 14 helper functions
+src/
+├── sniper.py          # CLI entry point (Typer app + shell dispatcher)
+├── shell.py           # Interactive REPL with prompt_toolkit (tab completion, history)
+├── display.py         # Rich display functions (tables, panels, dashboard)
+├── db.py              # SQLite schema init + 12 helper functions
 ├── apollo.py          # Apollo API integration (contact discovery)
 ├── verify.py          # Hunter + ZeroBounce verification fallback chain
 ├── templates.py       # Loads templates.json, generates drafts + follow-ups
-├── config.py          # API keys from env vars (.env via dotenv), constants
-├── requirements.txt   # typer[all], rich, requests, pyperclip, python-dotenv
+├── config.py          # API keys, constants, Windows UTF-8 fix
+├── requirements.txt   # typer[all], rich, requests, pyperclip, python-dotenv, prompt_toolkit
 ├── .env.example       # Template for API keys
 ├── templates.json     # Auto-generated on first run, user-editable email templates
 └── sniper.db          # SQLite database (auto-created on first run)
 ```
-
-**Not yet created:** display.py (Prompt 6 will extract Rich display functions from sniper.py)
 
 ---
 
@@ -53,6 +52,7 @@ job-sniper/
 - DB_PATH: sniper.db in same directory
 - Credit limits: HUNTER_MONTHLY_LIMIT=25, ZEROBOUNCE_MONTHLY_LIMIT=100
 - Follow-up timing: FOLLOWUP_1_DAYS=4, FOLLOWUP_2_DAYS=10, FOLLOWUP_3_DAYS=7
+- **Windows UTF-8 fix:** Reconfigures stdout/stderr to UTF-8 on Windows. Consolidated here because every module imports config directly or transitively.
 
 ---
 
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS outreach_log (
 );
 ```
 
-### 14 Helper Functions (all implemented)
+### 12 Helper Functions
 
 - init_db() — idempotent schema creation
 - add_company() — with explicit duplicate company detection (handles NULL contact_email case)
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS outreach_log (
 - update_status() — status transitions with special handling for emailed (sets date) and followed_up (increments count + logs followup_N)
 - get_followups_due() — timing-based follow-up logic with auto-dead after 3 follow-ups
 - get_status_counts(), get_credit_usage(), increment_credits() — dashboard/credit helpers using UPSERT
-- get_company_by_id(), search_company() — lookup helpers
+- search_company() — case-insensitive partial match lookup
 
 ---
 
@@ -164,34 +164,25 @@ CREATE TABLE IF NOT EXISTS outreach_log (
 
 ---
 
-## 6. display.py — Rich Terminal Output (NOT YET BUILT)
+## 6. display.py — Rich Terminal Output (BUILT)
 
-This is the next step. Currently all Rich display logic lives inline in sniper.py. Prompt 6 should extract it into a dedicated display.py module.
+All Rich display logic extracted from sniper.py into display.py.
 
-### Functions to Extract/Implement
+### Functions
 
-```python
-def show_drafts_table(drafts: list[dict]) -> None:
-    """Table: #, Company, Contact, Verified, Draft Preview.
-    Verification color coding: green for verified, yellow for unverified, dim for None."""
+- `show_drafts_table(drafts)` — Table: #, Company, Contact, Verified, Draft Preview
+- `show_draft_detail(c, number)` — Panel: ═══ header, contact info, LinkedIn, email + verification, template type, subject + body, reminder box
+- `show_followups_table(followups)` — Table: Company, Contact, Days Since, Follow-up #, Draft Preview
+- `show_status_dashboard(counts, credits)` — Panel dashboard: color-coded status counts, reply rate, API credits
+- `show_process_preview(queued)` — Dry-run table: all fields "pending"
 
-def show_draft_detail(company: dict) -> None:
-    """Rich Panel: header (company + contact + title), LinkedIn URL, email + verification,
-    template type (A/B), full subject + body, reminder box (LinkedIn check, Gmail hover for unverified)."""
+### Color Coding
 
-def show_followups_table(followups: list[dict]) -> None:
-    """Table: Company, Contact, Days Since, Follow-up #, Draft Preview (60 chars)."""
-
-def show_status_dashboard(counts: dict, credits: dict) -> None:
-    """Panel dashboard: status counts, total, reply rate, API credits remaining."""
-
-def show_process_preview(queued: list[dict]) -> None:
-    """Dry-run table: #, Company, Role, Contact, Email, Verified (all "pending")."""
-```
-
-### Current State in sniper.py
-
-The drafts table, drafts show panel, followups table, status dashboard, and process preview are all built and working — they're just inline in sniper.py command functions rather than in a separate display.py. Prompt 6 should refactor them out for cleaner code organization.
+- Green: verified (hunter/zerobounce), replied, interview
+- Yellow: unverified, emailed, followed_up
+- Red: dead, stale
+- Blue: queued, info headers
+- Cyan: ready
 
 ---
 
@@ -212,14 +203,34 @@ The drafts table, drafts show panel, followups table, status dashboard, and proc
 
 ### Implementation Notes
 
-- Windows UTF-8 fix applied: stdout/stderr reconfigured to UTF-8, Console(force_terminal=True)
+- Windows UTF-8 fix consolidated in config.py (imported transitively by all modules)
 - drafts is a Typer sub-group with callback(invoke_without_command=True) for listing + `show` subcommand
 - Valid statuses: queued, ready, emailed, followed_up, replied, interview, dead, stale
-- Entry point: `if __name__ == "__main__": app()`
+- Entry point dispatches based on arguments: no args → interactive shell (shell.py), otherwise → Typer CLI
 
 ---
 
-## 8. Key Implementation Details
+## 8. shell.py — Interactive Shell (BUILT)
+
+Interactive REPL mode launched when `sniper.py` is run with no arguments.
+
+### Features
+
+- **prompt_toolkit integration:** PromptSession with colored `sniper>` prompt, FileHistory for persistent command history, AutoSuggestFromHistory for inline suggestions
+- **Tab completion:** Custom SniperCompleter with context-aware completion:
+  - Command names (add, process, drafts, update, followups, status, help, exit)
+  - Flags per command (e.g. `add --company`, `process --dry-run`)
+  - Status values after `--status`/`-s` flag (emailed, followed_up, replied, etc.)
+  - `drafts show` subcommand
+- **Graceful fallback:** If prompt_toolkit fails to initialize (piped stdin, non-TTY, mintty), falls back to plain `input()` prompt
+- **Command dispatch:** Commands forwarded to sniper.py via `subprocess.run([sys.executable, SNIPER_PATH] + args)` — avoids Typer internal complexity
+- **History file:** `~/.sniper_history` (persistent across sessions)
+- **Built-in commands:** `help` (shows command list), `exit`/`quit` (exits shell)
+- **Error handling:** KeyboardInterrupt re-prompts, EOFError exits cleanly, unknown commands show help hint
+
+---
+
+## 9. Key Implementation Details
 
 ### Duplicate Prevention
 Explicit company name check in add_company() (not relying on UNIQUE constraint since contact_email is NULL at queue time).
@@ -236,61 +247,51 @@ Monthly reset via YYYY-MM month column in api_credits table. UPSERT pattern for 
 ### Auto-Dead After 3 Follow-ups
 get_followups_due() auto-marks companies with followup_count >= 3 as "dead".
 
----
-
-## 9. Remaining Build Prompts
-
-### Prompt 6: Rich display extraction
-```
-Extract all Rich display logic from sniper.py into a new display.py module. Create these functions:
-show_drafts_table(), show_draft_detail(), show_followups_table(), show_status_dashboard(), show_process_preview().
-Update sniper.py to import and call display functions instead of inline Rich code.
-Also review and improve the visual output:
-- Make sure the drafts show panel matches the plan doc layout exactly (the ═══ header with company/contact/LinkedIn/email/template line, then the full email, then the reminder box at the bottom)
-- Add color coding consistency: green for verified/success, yellow for unverified/warnings, red for errors, blue for info
-- Make the status dashboard match the plan doc's box-drawing layout as closely as Rich allows
-Test all commands still work after the refactor.
-```
-
-### Prompt 7: Polish + full integration test
-```
-Full integration test and polish pass:
-1. Clean the DB, add 3-4 test companies (mix of --applied and proactive), run process --dry-run, run process (will fail gracefully without API keys), manually insert simulated contact data for testing, run drafts, drafts show 1, update to emailed, check followups, check status dashboard.
-2. Fix any display bugs, alignment issues, or edge cases found during testing.
-3. Make sure sniper --help is clean and all subcommand help text is descriptive.
-4. Add a shebang line to sniper.py if not already present.
-5. Verify templates.json auto-creates cleanly on fresh run.
-6. Test edge cases: empty database, update nonexistent company, drafts show with invalid index, followups when none due.
-```
+### Windows UTF-8 Fix
+Consolidated in config.py — reconfigures sys.stdout and sys.stderr to UTF-8 with errors="replace". Runs once at import time since every module imports config directly or transitively. Modules that don't naturally import config (like templates.py) use `import config  # noqa: F401` for the side effect.
 
 ---
 
-## 10. What Success Looks Like
+## 10. Potential v1.1 Improvements
+
+- **Reprocess command:** `sniper reprocess <company>` to re-run Apollo/verify for a specific company
+- **Export to CSV:** `sniper export` to dump the pipeline to a spreadsheet for sharing
+- **Email pattern guessing fallback:** When Apollo returns no email, guess firstname.lastname@company.com
+- **Batch follow-up status updates:** `sniper update --all-emailed` to bulk-update after a send session
+- **Terminal color theming:** Let users pick color schemes via config or environment variable
+- **Shell improvements:** Multi-line input, company name completion from database, `!!` to repeat last command
+
+---
+
+## 11. What Success Looks Like
 
 After the build, these commands all work:
 
 ```bash
-# Queue companies
-sniper add --company "Cloudflare" --role "New Grad SWE" --url "https://..." --applied
-sniper add --company "Tailscale" --role "DevOps / Infra" --notes "Love their WireGuard approach"
+# Interactive mode
+python sniper.py              # launches sniper> shell with tab completion
+
+# Direct CLI mode
+python sniper.py add --company "Cloudflare" --role "New Grad SWE" --url "https://..." --applied
+python sniper.py add --company "Tailscale" --role "DevOps / Infra" --notes "Love their WireGuard approach"
 
 # Batch process
-sniper process --dry-run     # preview, no API calls
-sniper process               # Apollo + verify + generate drafts
+python sniper.py process --dry-run     # preview, no API calls
+python sniper.py process               # Apollo + verify + generate drafts
 
 # View and send
-sniper drafts                # table of ready drafts
-sniper drafts show 1         # full draft + LinkedIn + clipboard copy
+python sniper.py drafts                # table of ready drafts
+python sniper.py drafts show 1         # full draft + LinkedIn + clipboard copy
 
 # Track
-sniper update cloudflare --status emailed
-sniper update cloudflare --status replied
+python sniper.py update cloudflare --status emailed
+python sniper.py update cloudflare --status replied
 
 # Follow up
-sniper followups             # overdue follow-ups with auto-generated drafts
+python sniper.py followups             # overdue follow-ups with auto-generated drafts
 
 # Dashboard
-sniper status                # counts, reply rate, API credits
+python sniper.py status                # counts, reply rate, API credits
 ```
 
-Every command has clean Rich output. Every error has a human-readable message. The database is one file. Templates are editable via JSON.
+Every command has clean Rich output. Every error has a human-readable message. The database is one file. Templates are editable via JSON. The interactive shell provides tab completion and command history.

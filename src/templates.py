@@ -3,13 +3,9 @@
 import json
 import os
 
-from rich.console import Console
-
-console = Console(force_terminal=True)
+import config  # noqa: F401 — ensures Windows UTF-8 fix runs before print()
 
 TEMPLATES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates.json")
-
-REQUIRED_KEYS = ["applied", "proactive", "followups"]
 
 DEFAULT_TEMPLATES = {
     "applied": {
@@ -66,10 +62,9 @@ DEFAULT_TEMPLATES = {
 
 
 def _create_default_templates() -> None:
-    """Write templates.json with full default content."""
     with open(TEMPLATES_PATH, "w", encoding="utf-8") as f:
         json.dump(DEFAULT_TEMPLATES, f, indent=4, ensure_ascii=False)
-    console.print("[green]✓ Created templates.json — edit this file to customize your email templates[/green]")
+    print("\u2713 Created templates.json \u2014 edit this file to customize your email templates")
 
 
 def _load_templates() -> dict:
@@ -81,12 +76,12 @@ def _load_templates() -> dict:
         try:
             data = json.load(f)
         except json.JSONDecodeError:
-            console.print("[red]✗ templates.json has invalid JSON — fix it or delete it to regenerate defaults[/red]")
+            print("\u2717 templates.json has invalid JSON \u2014 fix it or delete it to regenerate defaults")
             raise SystemExit(1)
 
-    for key in REQUIRED_KEYS:
+    for key in ["applied", "proactive", "followups"]:
         if key not in data:
-            console.print(f"[red]✗ templates.json is missing required key '{key}' — fix it or delete it to regenerate defaults[/red]")
+            print(f"\u2717 templates.json is missing required key '{key}' \u2014 fix it or delete it to regenerate defaults")
             raise SystemExit(1)
 
     return data
@@ -101,14 +96,11 @@ def generate_draft(
     url: str = "",
     notes: str = "",
 ) -> tuple[str, str]:
-    """Generate (subject, body) tuple from templates."""
+    """Generate (subject, body) from templates."""
     tpl = _load_templates()
     key = "applied" if applied else "proactive"
     variables = {"first_name": first_name, "role": role, "company": company}
-
-    subject = tpl[key]["subject"].format(**variables)
-    body = tpl[key]["body"].format(**variables)
-    return subject, body
+    return tpl[key]["subject"].format(**variables), tpl[key]["body"].format(**variables)
 
 
 def generate_followup(
@@ -117,10 +109,7 @@ def generate_followup(
     original_subject: str,
     followup_number: int,
 ) -> tuple[str, str]:
-    """Generate follow-up (subject, body) tuple."""
+    """Generate follow-up (subject, body)."""
     tpl = _load_templates()
     variables = {"first_name": first_name, "company": company}
-
-    subject = f"Re: {original_subject}"
-    body = tpl["followups"][str(followup_number)].format(**variables)
-    return subject, body
+    return f"Re: {original_subject}", tpl["followups"][str(followup_number)].format(**variables)
