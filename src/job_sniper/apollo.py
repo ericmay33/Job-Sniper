@@ -2,8 +2,8 @@
 
 import requests
 
-import config
-import db
+from . import config
+from . import db
 
 RECRUITER_KEYWORDS = {"recruiter", "talent acquisition", "recruiting"}
 
@@ -16,7 +16,7 @@ def _is_recruiter_title(title: str) -> bool:
 def search_contact(company_name: str) -> dict | None:
     """Search Apollo for a recruiter or eng manager. Returns contact dict or None."""
     if not config.APOLLO_API_KEY:
-        print("✗ Apollo API key not set. Add APOLLO_API_KEY to your .env file")
+        print("\u2717 Apollo API key not set. Add APOLLO_API_KEY to your .env file")
         return None
 
     payload = {
@@ -42,14 +42,14 @@ def search_contact(company_name: str) -> dict | None:
             timeout=10,
         )
     except requests.RequestException as e:
-        print(f"⚠ Apollo request failed for {company_name}: {e}")
+        print(f"\u26a0 Apollo request failed for {company_name}: {e}")
         db.increment_credits("apollo")
         return None
 
     db.increment_credits("apollo")
 
     if resp.status_code != 200:
-        print(f"⚠ Apollo returned {resp.status_code} for {company_name}: {resp.text[:200]}")
+        print(f"\u26a0 Apollo returned {resp.status_code} for {company_name}: {resp.text[:200]}")
         return None
 
     people = resp.json().get("people") or []

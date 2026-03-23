@@ -11,13 +11,19 @@ if sys.platform == "win32":
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Data directory: ~/.job-sniper/
+DATA_DIR = os.path.join(os.path.expanduser("~"), ".job-sniper")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# Load .env from ~/.job-sniper/ first, then fall back to current working directory
+load_dotenv(os.path.join(DATA_DIR, ".env"))
+load_dotenv()  # cwd .env — won't overwrite keys already set
 
 APOLLO_API_KEY = os.environ.get("APOLLO_API_KEY", "")
 HUNTER_API_KEY = os.environ.get("HUNTER_API_KEY", "")
 ZEROBOUNCE_API_KEY = os.environ.get("ZEROBOUNCE_API_KEY", "")
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sniper.db")
+DB_PATH = os.path.join(DATA_DIR, "sniper.db")
 
 HUNTER_MONTHLY_LIMIT = 25
 ZEROBOUNCE_MONTHLY_LIMIT = 100

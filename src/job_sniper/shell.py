@@ -5,8 +5,7 @@ import shlex
 import subprocess
 import sys
 
-SNIPER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sniper.py")
-HISTORY_PATH = os.path.join(os.path.expanduser("~"), ".sniper_history")
+HISTORY_PATH = os.path.join(os.path.expanduser("~"), ".job-sniper", "history")
 
 COMMANDS = {
     "add":       "Add a company to the outreach queue",
@@ -112,7 +111,7 @@ def _make_prompt_func():
 
 def run_shell():
     """Launch the interactive sniper> REPL."""
-    import db
+    from . import db
     db.init_db()
 
     prompt = _make_prompt_func()
@@ -150,4 +149,4 @@ def run_shell():
             print("Unknown command. Type 'help' for available commands.")
             continue
 
-        subprocess.run([sys.executable, SNIPER_PATH] + args)
+        subprocess.run([sys.executable, "-m", "job_sniper"] + args)

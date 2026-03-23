@@ -3,7 +3,7 @@
 import sqlite3
 from datetime import datetime
 
-from config import DB_PATH, FOLLOWUP_1_DAYS, FOLLOWUP_2_DAYS, FOLLOWUP_3_DAYS
+from .config import DB_PATH, FOLLOWUP_1_DAYS, FOLLOWUP_2_DAYS, FOLLOWUP_3_DAYS
 
 
 def _connect() -> sqlite3.Connection:

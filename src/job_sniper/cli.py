@@ -7,11 +7,11 @@ import sys
 import typer
 from rich.console import Console
 
-import apollo
-import db
-import display
-import templates
-import verify
+from . import apollo
+from . import db
+from . import display
+from . import templates
+from . import verify
 
 app = typer.Typer(help="Job Sniper - Cold outreach pipeline for job search")
 drafts_app = typer.Typer(help="List ready drafts, or use 'drafts show #' for full detail")
@@ -200,10 +200,14 @@ def update(
     console.print(f"[green]\u2713 {match['company']} \u2192 {status}[/green]")
 
 
-if __name__ == "__main__":
-    # No arguments → interactive shell; otherwise → normal Typer CLI
+def main():
+    """Entry point: no args → interactive shell, otherwise → Typer CLI."""
     if len(sys.argv) <= 1:
-        from shell import run_shell
+        from .shell import run_shell
         run_shell()
     else:
         app()
+
+
+if __name__ == "__main__":
+    main()

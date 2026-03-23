@@ -3,9 +3,9 @@
 import json
 import os
 
-import config  # noqa: F401 — ensures Windows UTF-8 fix runs before print()
+from . import config  # noqa: F401 — ensures Windows UTF-8 fix runs before print()
 
-TEMPLATES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates.json")
+TEMPLATES_PATH = os.path.join(config.DATA_DIR, "templates.json")
 
 DEFAULT_TEMPLATES = {
     "applied": {

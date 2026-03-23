@@ -2,8 +2,8 @@
 
 import requests
 
-import config
-import db
+from . import config
+from . import db
 
 
 def _try_hunter(email: str) -> str | None:
@@ -20,14 +20,14 @@ def _try_hunter(email: str) -> str | None:
             timeout=10,
         )
     except requests.RequestException as e:
-        print(f"⚠ Hunter request failed: {e}")
+        print(f"\u26a0 Hunter request failed: {e}")
         db.increment_credits("hunter")
         return None
 
     db.increment_credits("hunter")
 
     if resp.status_code != 200:
-        print(f"⚠ Hunter returned {resp.status_code}")
+        print(f"\u26a0 Hunter returned {resp.status_code}")
         return None
 
     status = resp.json().get("data", {}).get("status", "")
@@ -50,14 +50,14 @@ def _try_zerobounce(email: str) -> str | None:
             timeout=10,
         )
     except requests.RequestException as e:
-        print(f"⚠ ZeroBounce request failed: {e}")
+        print(f"\u26a0 ZeroBounce request failed: {e}")
         db.increment_credits("zerobounce")
         return None
 
     db.increment_credits("zerobounce")
 
     if resp.status_code != 200:
-        print(f"⚠ ZeroBounce returned {resp.status_code}")
+        print(f"\u26a0 ZeroBounce returned {resp.status_code}")
         return None
 
     status = resp.json().get("status", "")
@@ -67,5 +67,5 @@ def _try_zerobounce(email: str) -> str | None:
 
 
 def verify_email(email: str) -> str:
-    """Hunter → ZeroBounce fallback. Returns verification status string."""
+    """Hunter \u2192 ZeroBounce fallback. Returns verification status string."""
     return _try_hunter(email) or _try_zerobounce(email) or "unverified"
